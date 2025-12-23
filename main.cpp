@@ -2,10 +2,54 @@
 #include <cstdint>
 #include <iostream>
 
+struct DRAM {
+    uint64_t size = 1024 * 1024 * 128;
+    std::vector<uint8_t> dram;
+
+    // Initialize the memory vector to the defined size (128MB)
+    DRAM() {
+        dram.resize(size);
+    }
+
+    // Read 'nbytes' from memory at 'addr'.
+    // Combines bytes using little-endian ordering (LSB at lowest address).
+    uint64_t load(uint64_t addr, uint64_t nbytes) {
+        uint64_t value = 0;
+        for (uint64_t i = 0; i < nbytes; i++) {
+            value |= (uint64_t)dram[addr + i] << (i * 8);
+        }
+        return value;
+    }
+
+    // Write 'nbytes' of 'value' to memory at 'addr'.
+    // Splits the value into bytes, storing LSB first (Little Endian).
+    void store(uint64_t addr, uint64_t nbytes, uint64_t value) {
+        for (uint64_t i = 0; i < nbytes; i++) {
+            dram[addr + i] = (value >> (i * 8)) & 0xFF;
+        }
+    }
+
+    uint64_t load8(uint64_t addr) { return load(addr, 1); }
+    uint64_t load16(uint64_t addr) { return load(addr, 2); }
+    uint64_t load32(uint64_t addr) { return load(addr, 4); }
+    uint64_t load64(uint64_t addr) { return load(addr, 8); }
+
+    void store8(uint64_t addr, uint64_t value) { store(addr, 1, value); }
+    void store16(uint64_t addr, uint64_t value) { store(addr, 2, value); }
+    void store32(uint64_t addr, uint64_t value) { store(addr, 4, value); }
+    void store64(uint64_t addr, uint64_t value) { store(addr, 8, value); }
+} DRAM;
+
+struct Bus {
+    struct DRAM dram;
+} Bus;
+
+
 struct CPU {
     uint64_t registers[32];
     uint64_t pc;
     std::vector<uint8_t> code;
+    struct Bus bus;
 
     uint32_t fetch() {
         CPU *cpu = (CPU*)this;
