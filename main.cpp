@@ -90,6 +90,9 @@ struct CPU {
                     case 0x1: registers[rd] = (int64_t)(int16_t)bus.load(addr, 2); break; // LH
                     case 0x2: registers[rd] = (int64_t)(int32_t)bus.load(addr, 4); break; // LW
                     case 0x3: registers[rd] = bus.load(addr, 8); break; // LD
+                    case 0x4: registers[rd] = (uint64_t)bus.load(addr, 1); break; // LBU
+                    case 0x5: registers[rd] = (uint64_t)bus.load(addr, 2); break; // LHU
+                    case 0x6: registers[rd] = (uint64_t)bus.load(addr, 4); break; // LWU
                 }
                 break;
             }
