@@ -2,6 +2,13 @@
 #include <cstdint>
 #include <iostream>
 
+// CSR Addresses
+const uint16_t SIE = 0x104;
+const uint16_t MIE = 0x304;
+const uint16_t MIDELEG = 0x303;
+
+
+
 struct DRAM {
     uint64_t size = 1024 * 1024 * 128;
     std::vector<uint8_t> dram;
@@ -63,13 +70,40 @@ struct CPU {
     uint64_t pc;
     std::vector<uint8_t> code;
     struct Bus bus;
+    uint64_t csrs[4096];
 
     uint32_t fetch() {
         CPU *cpu = (CPU*)this;
         uint32_t index = cpu->pc / 4;
         return ((uint32_t)cpu->code[index * 4 + 0]) | ((uint32_t)cpu->code[index * 4 + 1] << 8) | ((uint32_t)cpu->code[index * 4 + 2] << 16) | (uint32_t)cpu->code[index * 4 + 3] << 24;
     }
-    
+
+    uint64_t load_csrs(uint64_t addr) {
+        // Load CSR values into the CPU's CSR array
+        switch (addr) {
+            case SIE:
+                // Return only the bits delegated to Supervisor mode
+                return csrs[MIE] & csrs[MIDELEG];
+            default:
+                // Return the raw value for all other addresses
+                return csrs[addr];
+        }
+    }
+
+    void store_csrs(uint64_t addr, uint64_t value) {
+        // Store CSR values into the CPU's CSR array
+        switch (addr) {
+            case SIE:
+                // Update only the bits delegated to Supervisor mode
+                csrs[MIE] = (csrs[MIE] & ~csrs[MIDELEG]) | (value & csrs[MIDELEG]);
+                break;
+            default:
+                // Store the raw value for all other addresses
+                csrs[addr] = value;
+                break;
+        }
+    }
+
     uint32_t execute(uint32_t instruction) {
         uint32_t opcode = instruction & 0x7F;
         uint32_t rd = (instruction >> 7) & 0x1F;
@@ -97,7 +131,7 @@ struct CPU {
                 break;
             }
             case 0x13: // ADDI
-                this->registers[rd] = this->registers[rs1] + ((instruction >> 20) & 0xFFF);
+                this->registers[rd] = this->registers[rs1] + ((int32_t)(imm << 20) >> 20);
                 break;
             case 0x23: { // STORE
                 uint32_t imm_s = ((instruction >> 25) << 5) | ((instruction >> 7) & 0x1F);
