@@ -3,9 +3,49 @@
 #include <iostream>
 
 // CSR Addresses
-const uint16_t SIE = 0x104;
-const uint16_t MIE = 0x304;
+const uint16_t MHARTID = 0xf14;
+// Machine status register.
+const uint16_t MSTATUS = 0x300;
+// Machine exception delegation register.
+const uint16_t MEDELEG = 0x302;
+// Machine interrupt delegation register.
 const uint16_t MIDELEG = 0x303;
+// Machine interrupt-enable register.
+const uint16_t MIE = 0x304;
+// Machine trap-handler base address.
+const uint16_t MTVEC = 0x305;
+// Machine counter enable.
+const uint16_t MCOUNTEREN = 0x306;
+// Scratch register for machine trap handlers.
+const uint16_t MSCRATCH = 0x340;
+// Machine exception program counter.
+const uint16_t MEPC = 0x341;
+// Machine trap cause.
+const uint16_t MCAUSE = 0x342;
+// Machine bad address or instruction.
+const uint16_t MTVAL = 0x343;
+// Machine interrupt pending.
+const uint16_t MIP = 0x344;
+
+// Supervisor-level CSRs.
+// Supervisor status register.
+const uint16_t SSTATUS = 0x100;
+// Supervisor interrupt-enable register.
+const uint16_t SIE = 0x104;
+// Supervisor trap handler base address.
+const uint16_t STVEC = 0x105;
+// Scratch register for supervisor trap handlers.
+const uint16_t SSCRATCH = 0x140;
+// Supervisor exception program counter.
+const uint16_t SEPC = 0x141;
+// Supervisor trap cause.
+const uint16_t SCAUSE = 0x142;
+// Supervisor bad address or instruction.
+const uint16_t STVAL = 0x143;
+// Supervisor interrupt pending.
+const uint16_t SIP = 0x144;
+// Supervisor address translation and protection.
+const uint16_t SATP = 0x180;
 
 
 
@@ -110,11 +150,8 @@ struct CPU {
         uint32_t rs1 = (instruction >> 15) & 0x1F;
         uint32_t rs2 = (instruction >> 20) & 0x1F;
         uint32_t funct3 = (instruction >> 12) & 0x7;
-        // uint32_t funct7 = (instruction >> 25) & 0x7F;
+        uint32_t funct7 = (instruction >> 25) & 0x7F;
         uint32_t imm = (instruction >> 20) & 0xFFF;
-        // uint32_t shamt = (instruction >> 20) & 0x1F;
-        // uint32_t immU = (instruction >> 12) & 0xFFFFF;
-
         switch (opcode) {
             case 0x03: { // LOAD
                 int64_t imm_i = (int32_t)(imm << 20) >> 20;
@@ -130,9 +167,10 @@ struct CPU {
                 }
                 break;
             }
-            case 0x13: // ADDI
+            case 0x13: { // ADDI
                 this->registers[rd] = this->registers[rs1] + ((int32_t)(imm << 20) >> 20);
                 break;
+            }
             case 0x23: { // STORE
                 uint32_t imm_s = ((instruction >> 25) << 5) | ((instruction >> 7) & 0x1F);
                 int64_t imm_s_sext = (int32_t)(imm_s << 20) >> 20;
@@ -145,20 +183,66 @@ struct CPU {
                 }
                 break;
             }
-            case 0x33: // ADD
+            case 0x33: { // ADD
                 this->registers[rd] = this->registers[rs1] + this->registers[rs2];
                 break;
+            }
+            case 0x73: { // CSR
+                uint64_t csr_addr = ((instruction & 0xfff00000) >> 20);
+                switch (funct3) {
+                    case 0x1: { // CSRRW
+                        uint64_t temp = 0;
+                        if (rd != 0) temp = load_csrs(csr_addr);
+                        store_csrs(csr_addr, registers[rs1]);
+                        if (rd != 0) registers[rd] = temp;
+                        break;
+                    }
+                    case 0x2: { // CSRRS
+                        uint64_t temp = load_csrs(csr_addr);
+                        if (rs1 != 0) store_csrs(csr_addr, temp | registers[rs1]);
+                        if (rd != 0) registers[rd] = temp;
+                        break;
+                    }
+                    case 0x3: { // CSRRC
+                        uint64_t temp = load_csrs(csr_addr);
+                        if (rs1 != 0) store_csrs(csr_addr, temp & ~registers[rs1]);
+                        if (rd != 0) registers[rd] = temp;
+                        break;
+                    }
+                    case 0x5: { // CSRRWI
+                        uint64_t temp = 0;
+                        if (rd != 0) temp = load_csrs(csr_addr);
+                        store_csrs(csr_addr, rs1);
+                        if (rd != 0) registers[rd] = temp;
+                        break;
+                    }
+                    case 0x6: { // CSRRSI
+                        uint64_t temp = load_csrs(csr_addr);
+                        if (rs1 != 0) store_csrs(csr_addr, temp | rs1);
+                        if (rd != 0) registers[rd] = temp;
+                        break;
+                    }
+                    case 0x7: { // CSRRCI
+                        uint64_t temp = load_csrs(csr_addr);
+                        if (rs1 != 0) store_csrs(csr_addr, temp & ~rs1);
+                        if (rd != 0) registers[rd] = temp;
+                        break;
+                    }
             default:
                 break;
         }
-        return 0;
+        break;
     }
+    }
+    return 0;
+}
 
 } CPU;
 
 int main() {
     // Initialize register x1 to DRAM_BASE
     CPU.registers[1] = 0x80000000;
+    CPU.registers[0] = 0; // x0 is always 0
 
     // Load a simple test program:
     // 1. ADDI x2, x0, 42  (Opcode: 0x13, rd: 2, imm: 42) -> Hex: 02A00113
